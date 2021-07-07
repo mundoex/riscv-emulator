@@ -1,5 +1,4 @@
 import { Instruction } from "./Instruction";
-import { binToDecimal } from "./number-systems";
 
 const opcodefmt = {
 	0x37:   "U",

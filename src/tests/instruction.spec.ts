@@ -21,7 +21,7 @@ const results=["jal", "addi", "lui", "lw", "addi", "lw", "add", "addi", "sw", "a
 describe("Instruction Tests", function() {
 
     for (let index = 0; index < instructions.length; index++) {
-        it("Should match result",function(){
+        it(`Instruction at index:${index} should match result for instruction name`,function(){
             var instName=instrName(instructions[index]);
             expect(instName).toEqual(results[index])
         });   
