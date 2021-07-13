@@ -7,5 +7,9 @@ export function binaryToDecimal(binary:string){
 }
 
 export function decimalToBinary(decimal:number) : string{
-    return Number(decimal).toString(2);
+    return decimal.toString(2);
+}
+
+export function decimalToHex(...decimals:Array<number>) : string|string[]{
+    return decimals.map(dec=>dec.toString(16));
 }

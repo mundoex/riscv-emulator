@@ -1,10 +1,12 @@
-import { REGISTER_SIZE } from "./constants";
-import { instrName } from "./disassembler";
-import { Instruction } from "./Instruction";
+import { ByteArray32 } from "./ByteArray32";
+import { bitsToInstruction } from "./disassembler";
+import { BInstruction32, IInstruction32, Instruction32, JInstruction32, RInstruction32, SInstruction32, UInstruction32 } from "./Instructions";
+import { decimalToHex } from "./number-systems";
 import { Register } from "./Register";
 
-
 export class Core{
+    public debugMode:boolean=true;
+    public static readonly STEP=4;
     readonly zero = new Register();
     ra = new Register();  //x1 return address for jumps Preserved: no
     sp = new Register();  //x2 stack pointer Preserved: yes
@@ -44,9 +46,25 @@ export class Core{
     t5 = new Register();  //x30 temporary register 5 Preserved: no
     t6  = new Register();  //x31 temporary register 6 Preserved: no
 
-    pc = new Register();   //program counter
+    pc = 0;   //program counter
+
+    //memory
+    memory=new Array<ByteArray32>();
 
     constructor(){}
+
+    storeProgram(programHex:string){
+        const numChunks = Math.ceil(programHex.length / 8);
+
+        for (let i = 0, o = 0; i < numChunks; ++i, o += 8) {
+            const hex = programHex.substr(o, 8);
+            this.memory.push(new ByteArray32(hex));
+        }
+    }
+
+    printMemory(){
+        this.memory.forEach((bits, i) => console.log(`${decimalToHex(i*4)}:\t${bits.hex}`));
+    }
 
     getRegister(registerIndex:number) : Register{
         switch(registerIndex){
@@ -91,22 +109,118 @@ export class Core{
         }
     }
 
-    //ADDI rd, rs1, imm
-    //00000000010100101000001010010011 eg
-    //31 20 imm |19 15 rs1|14 12 funct3| 11 7 rd| 6 0 op 
-    //12 bits   |5 bits   |3 bits      | 5 bits | 7 bits
-    addi(ins:Instruction) : void{
-        //console.log(ins.rd,ins.rs1,imm); //debug info
-        //if most significative bit is 1 subtract 4096
-        const imm=ins.bits.getBitLE(31) ? ins.imm11_0-4096 : ins.imm11_0;
-        this.getRegister(ins.rd).setValue(this.getRegister(ins.rs1).getValue()+imm);
+    fetch() : ByteArray32{
+        const nextInstBits=this.memory[this.pc/Core.STEP];
+        this.pc+=Core.STEP;
+        return nextInstBits;
     }
 
-    exec(ins:Instruction){
-        const instName=instrName(ins);
-        switch(instName){
-            case "addi":    return this.addi(ins);
-            default: throw new Error("No instruction found");
+    decode(bits:ByteArray32) : Instruction32{
+        return bitsToInstruction(bits);
+    }
+
+    execute(ins:Instruction32) : void{
+        if(this.debugMode) console.log("Executing "+ins.toString());
+
+        switch(ins.name){
+            case "jal":     return this.jal(<JInstruction32> ins);
+            case "addi":    return this.addi(<IInstruction32> ins);
+            case "lui":     return this.lui(<UInstruction32> ins);
+            case "lw":      return this.lw(<IInstruction32> ins);
+            case "add":     return this.add(<RInstruction32> ins);
+            case "sw":      return this.sw(<SInstruction32> ins);
+            case "bne":     return this.bne(<BInstruction32> ins);
+            default: throw new Error("No instruction name found");
+        }
+    }
+
+    run(){
+        let bits:ByteArray32;
+        while((bits=this.fetch()) !== undefined){
+            const ins:Instruction32=this.decode(bits);
+            this.execute(ins);
+        }
+    }
+
+    print() : void{
+        console.log("Core values in registers:");
+        for (let i = 0; i < 32; i++) {
+            console.log(`Binary Format x${i}: ${this.getRegister(i).binary}`);
+        }
+    }
+
+    /*
+    The jump and link (JAL) instruction uses the J-type format, where the J-immediate encodes a
+    signed offset in multiples of 2 bytes. The offset is sign-extended and added to the pc to form the
+    jump target address. Jumps can therefore target a ±1 MiB range. JAL stores the address of the
+    instruction following the jump (pc+4) into register rd. The standard software calling convention
+    uses x1 as the return address register and x5 as an alternate link register.
+    Plain unconditional jumps (assembler pseudo-op J) are encoded as a JAL with rd=x0
+    */
+    jal(ins:JInstruction32) : void{
+        this.getRegister(ins.op1).setValue(this.pc+Core.STEP);
+        this.pc=ins.op2;
+    }
+
+    /*
+    ADDI adds the sign-extended 12-bit immediate to register rs1. Arithmetic overflow is ignored and
+    the result is simply the low XLEN bits of the result. ADDI rd, rs1, 0 is used to implement the MV
+    rd, rs1 assembler pseudo-instruction.
+    */
+    addi(ins:IInstruction32) : void{
+        this.getRegister(ins.op1).setValue(this.getRegister(ins.op2).decimal + ins.op3);
+    }
+
+    /*
+    LUI (load upper immediate) is used to build 32-bit constants and uses the U-type format. LUI
+    places the U-immediate value in the top 20 bits of the destination register rd, filling in the lowest
+    12 bits with zeros.
+    */
+    lui(ins:UInstruction32) : void{
+        this.getRegister(ins.op1).setValue(ins.op2 << 12);
+    }
+
+    /*
+    The LW instruction loads a 32-bit value from memory into rd. LH loads a 16-bit value from memory,
+    then sign-extends to 32-bits before storing in rd. LHU loads a 16-bit value from memory but then
+    zero extends to 32-bits before storing in rd. LB and LBU are defined analogously for 8-bit values.
+    The SW, SH, and SB instructions store 32-bit, 16-bit, and 8-bit values from the low bits of register
+    rs2 to memory.
+    */
+    lw(ins:IInstruction32) : void{
+        //TODO missing 32bits mask and offset requires fix
+        this.getRegister(ins.op1).setValue(this.getRegister(ins.op2).getValue());
+    }
+    //TODO fix:add is setvalue is sending negative value
+    add(ins:RInstruction32) : void{
+        this.getRegister(ins.op1).setValue(this.getRegister(ins.op2).getValue() + this.getRegister(ins.op3).getValue());
+    }
+    /*
+    Load and store instructions transfer a value between the registers and memory. Loads are encoded
+    in the I-type format and stores are S-type. The effective byte address is obtained by adding register
+    rs1 to the sign-extended 12-bit offset. Loads copy a value from memory to register rd. Stores copy
+    the value in register rs2 to memory.
+    The LW instruction loads a 32-bit value from memory into rd. LH loads a 16-bit value from memory,
+    then sign-extends to 32-bits before storing in rd. LHU loads a 16-bit value from memory but then
+    zero extends to 32-bits before storing in rd. LB and LBU are defined analogously for 8-bit values.
+    The SW, SH, and 
+    */
+    sw(ins:SInstruction32) : void{
+        //TODO missing 32bits mask and offset requires fix
+        this.getRegister(ins.op2).setValue(this.getRegister(ins.op1).getValue())
+    }
+
+    /*
+    Branch instructions compare two registers. BEQ and BNE take the branch if registers rs1 and rs2
+    are equal or unequal respectively. BLT and BLTU take the branch if rs1 is less than rs2, using
+    signed and unsigned comparison respectively. BGE and BGEU take the branch if rs1 is greater
+    than or equal to rs2, using signed and unsigned comparison respectively. Note, BGT, BGTU,
+    BLE, and BLEU can be synthesized by reversing the operands to BLT, BLTU, BGE, and BGEU,
+    respectively
+    */
+    bne(ins:BInstruction32) : void{
+        if(this.getRegister(ins.op1).getValue()!==this.getRegister(ins.op2).getValue()){
+            this.pc+=ins.op3;
         }
     }
 }

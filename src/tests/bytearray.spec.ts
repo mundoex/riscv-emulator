@@ -1,13 +1,5 @@
-import { ByteArray64 } from "../ByteArray64";
 import { ByteArray32 } from "../ByteArray32";
 import { binaryToDecimal } from "../number-systems";
-
-
-
-// let bits64arr0=new ByteArray64("004000ef");
-// let bits64arr1=new ByteArray64("00450513");
-// let bits64arr2=new ByteArray64("00c005b3");
-// let bits64arr3=new ByteArray64("fff70713");
 
 describe("ByteArray32 Tests", function() {
 

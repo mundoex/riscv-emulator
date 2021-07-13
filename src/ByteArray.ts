@@ -4,9 +4,9 @@ export abstract class ByteArray extends Uint8Array{
     //el super man constructor lmao
     constructor(bytesSizeOrBufferOrHex:number|Buffer|string){
         switch(typeof bytesSizeOrBufferOrHex){
-            case "string": super(Buffer.from(bytesSizeOrBufferOrHex, "hex"));break;
-            case "number": super(<number>bytesSizeOrBufferOrHex);break;
-            default: super(<Buffer>bytesSizeOrBufferOrHex);break;
+            case "string": super(Buffer.from(bytesSizeOrBufferOrHex, "hex"));   break;
+            case "number": super(<number>bytesSizeOrBufferOrHex);   break;
+            default: super(<Buffer>bytesSizeOrBufferOrHex); break;
         }
     }
 

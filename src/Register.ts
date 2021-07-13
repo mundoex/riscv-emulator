@@ -6,10 +6,10 @@ export class Register extends ByteArray64{
     }
 
     public getValue() : number{
-        return this.readBytes();
+        return this.readSBytes();
     }
 
     public setValue(value:number) : void{
-        return this.writeBytes(value);
+        return this.writeSBytes(value);
     }
 }

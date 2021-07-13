@@ -8,6 +8,7 @@ export class ByteArray32 extends ByteArray{
     public readBytes(): number {
         return Buffer.from(this.buffer).readUInt32BE();
     }
+    
     public writeBytes(num: number): void {
         const newBuffer=Buffer.alloc(this.length);
         newBuffer.writeUInt32BE(num);
